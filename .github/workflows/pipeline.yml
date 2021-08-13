@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@main
       - name: supply config.go with enviromental variables
         run: >
-          export GITHUB_REPO=${{ github.event.inputs.GITHUB_REPO }};
+          export ORIGINAL_REPOSITORY=${{ github.event.inputs.ORIGINAL_REPOSITORY }};
           export LMS_COMPANY_TOKEN=${{ secrets.LMS_COMPANY_TOKEN }};
           export CALLBACK_TASK_ID=${{ github.event.inputs.CALLBACK_TASK_ID }};
           cp -pf config.go sourceConfig.go && cat sourceConfig.go | envsubst > config.go && rm sourceConfig.go;
