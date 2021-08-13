@@ -2,17 +2,11 @@ name: Build checker for skills task
 on:
   workflow_dispatch:
     inputs:
-      ZIP_HASH:
-        description: 'Hash of directory tests/'
-        required: true
-      PIPELINE_HASH:
-        description: 'Hash of .github/workflows/pipeline.yml'
-        required: true
-      SKILLS_AUTH_TOKEN:
-        description: 'Skills company token'
+      ORIGINAL_REPOSITORY:
+        description: 'HTTPS-ссылка на github-репозиторий с тестами'
         required: true
       CALLBACK_TASK_ID:
-        description: 'Skills task id'
+        description: 'Номер задания на lms.metaclass.kts.studio'
         required: true
 env:
   REGISTRY: ghcr.io
@@ -24,14 +18,26 @@ jobs:
       - uses: actions/checkout@main
       - name: supply config.go with enviromental variables
         run: >
-          export ZIP_HASH=${{ github.event.inputs.ZIP_HASH }};
-          export PIPELINE_HASH=${{ github.event.inputs.PIPELINE_HASH }};
-          export SKILLS_AUTH_TOKEN=${{ github.event.inputs.SKILLS_AUTH_TOKEN }};
+          export GITHUB_REPO=${{ github.event.inputs.GITHUB_REPO }};
+          export LMS_COMPANY_TOKEN=${{ secrets.LMS_COMPANY_TOKEN }};
           export CALLBACK_TASK_ID=${{ github.event.inputs.CALLBACK_TASK_ID }};
           cp -pf config.go sourceConfig.go && cat sourceConfig.go | envsubst > config.go && rm sourceConfig.go;
-      - name: Build and Publish latest Docker image
-        uses: VaultVulp/gp-docker-action@1.1.8
+      - name: Log in to Docker Hub
+        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          image-name: task-${{ github.event.inputs.CALLBACK_TASK_ID }}
-          build-context: .
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
+        with:
+          images: school/backend-summer-2021
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
+        with:
+          context: .
+          push: true
+          tags: ${{ github.event.inputs.CALLBACK_TASK_ID }}
+          labels: ${{ steps.meta.outputs.labels }}

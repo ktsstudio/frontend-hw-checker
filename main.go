@@ -1,138 +1,94 @@
 package main
 
 import (
-	"archive/zip"
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"golang.org/x/mod/sumdb/dirhash"
 	"gopkg.in/yaml.v2"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
+	"os/exec"
+	"regexp"
 	"time"
 )
 
 type Config struct {
-	TestsDirectoryName   string
-	PipelineFilename     string
-	SkillsConfigFilename string
+	StudentConfigFilename string
 
-	ZipHash      string
-	PipelineHash string
-
-	SkillsAuthToken string
-	SkillsBaseUrl   string
+	GithubRepo      string
+	LmsCompanyToken string
+	LmsBaseUrl      string
 	CallbackTaskId  string
+
+	GithubStudentRepo string
+	GithubStudentRef  string
 }
 
-type SkillsConfig struct {
+var PYTEST_RESULT_PATTERN = regexp.MustCompile("={25}\\s*(?P<failed>\\d+ failed,?)?\\s*(?P<passed>\\d+ passed,?)?\\s*(?P<skipped>\\d+ skipped,?)?.*={25}")
+
+type StudentConfig struct {
 	UserToken string `yaml:"user_token"`
 }
 
-const (
-	ZipFilename = "tests.zip"
-)
-
-func zipDirectory(folder, zipName string) error {
-	destinationFile, err := os.Create(zipName)
-	if err != nil {
-		return err
-	}
-	zipArchive := zip.NewWriter(destinationFile)
-	err = filepath.Walk(folder, func(filePath string, info os.FileInfo, err error) error {
-		if info.IsDir() {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		relPath := strings.TrimPrefix(filePath, filepath.Dir(folder))
-		zipFile, err := zipArchive.Create(relPath)
-		if err != nil {
-			return err
-		}
-		fsFile, err := os.Open(filePath)
-		if err != nil {
-			return err
-		}
-		_, err = io.Copy(zipFile, fsFile)
-		if err != nil {
-			return err
-		}
-		_ = fsFile.Close()
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	err = zipArchive.Close()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func hashFile(filename string) (string, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return "", err
-	}
-	reader := io.Reader(f)
-
-	hash := sha256.New()
-	if _, err := io.Copy(hash, reader); err != nil {
-		return "", err
-	}
-	sum := hash.Sum(nil)
-	return hex.EncodeToString(sum), nil
-}
-
-func getSkillsConfig() (SkillsConfig, error) {
-	skillsConfig := SkillsConfig{}
-	f, err := os.Open(config.SkillsConfigFilename)
+func getStudentConfig() (StudentConfig, error) {
+	studentConfig := StudentConfig{}
+	f, err := os.Open(config.StudentConfigFilename)
 	defer func() {
 		_ = f.Close()
 	}()
 	if err != nil {
-		return SkillsConfig{}, err
+		log.Printf("Can not open %s", config.StudentConfigFilename)
+		return StudentConfig{}, err
 	}
 
+	log.Printf("Reading %s", config.StudentConfigFilename)
 	buffer, err := ioutil.ReadAll(f)
 	if err != nil {
-		return SkillsConfig{}, err
+		log.Printf("Can not read %s", config.StudentConfigFilename)
+		return StudentConfig{}, err
 	}
 
-	err = yaml.Unmarshal(buffer, &skillsConfig)
-	return skillsConfig, err
+	err = yaml.Unmarshal(buffer, &studentConfig)
+	log.Printf("Parse %s", config.StudentConfigFilename)
+	if err != nil {
+		log.Printf("Can not parse %s", config.StudentConfigFilename)
+		return StudentConfig{}, err
+	}
+	return studentConfig, nil
 }
 
-func submitResult(skillsConfig SkillsConfig) error {
+func submitResult(skillsConfig StudentConfig) error {
 	client := http.Client{}
 
+	type RequestExtra struct {
+		StudentRepo string `json:"student_repo"`
+		StudentRef  string `json:"student_ref"`
+	}
+
 	type Request struct {
-		Created   time.Time `json:"created"`
-		TaskID    string    `json:"task_id"`
-		UserToken string    `json:"user_token"`
+		Created   time.Time    `json:"created"`
+		TaskID    string       `json:"task_id"`
+		UserToken string       `json:"user_token"`
+		Extra     RequestExtra `json:"extra"`
 	}
 	data, err := json.Marshal(Request{
 		Created:   time.Now(),
 		TaskID:    config.CallbackTaskId,
 		UserToken: skillsConfig.UserToken,
+		Extra: RequestExtra{
+			StudentRepo: config.GithubStudentRepo,
+			StudentRef:  config.GithubStudentRef,
+		},
 	})
-	req, err := http.NewRequest("POST", config.SkillsBaseUrl, bytes.NewReader(data))
+	req, err := http.NewRequest("POST", config.LmsBaseUrl, bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
 
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", config.SkillsAuthToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", config.LmsCompanyToken))
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
@@ -144,44 +100,117 @@ func submitResult(skillsConfig SkillsConfig) error {
 	return nil
 }
 
-func main() {
-	skillsConfig, err := getSkillsConfig()
+func runCommand(cmd string, args ...string) (bytes.Buffer, error) {
+	var outBuffer bytes.Buffer
+	execCmd := exec.Command(cmd, args...)
+	execCmd.Stdout = &outBuffer
+	execCmd.Stderr = &outBuffer
+
+	err := execCmd.Run()
+	if outBuffer.Len() > 0 {
+		log.Println(outBuffer.String())
+	}
 	if err != nil {
-		log.Fatalf("Can not parse %s: %v", config.SkillsConfigFilename, err)
+		return bytes.Buffer{}, err
+	}
+	return outBuffer, nil
+}
+
+func setupEnvironment() error {
+	var err error
+	log.Printf("Setuping tests environment")
+	if _, err = os.Stat("requirements.txt"); err == nil {
+		log.Printf("Found requirements.txt")
+		log.Printf("Run pip3 install -r requirements.txt")
+		_, err = runCommand("pip3", "install", "-r", "requirements.txt")
+		if err != nil {
+			log.Printf("Can not install requirements: %e", err)
+			return err
+		}
+	}
+
+	log.Printf("Installing pytest")
+	_, err = runCommand("pip3", "install", "pytest")
+	if err != nil {
+		log.Printf("Can not install pytest: %e", err)
+		return err
+	}
+	log.Printf("Removing student tests/ dir")
+	_, err = runCommand("rm", "-rf", "tests")
+	if err != nil {
+		log.Printf("Can not remove tests/ folder: %e", err)
+		return err
+	}
+
+	log.Printf("Cloning original repo")
+	_, err = runCommand("git", "clone", config.GithubRepo, "original_repo")
+	if err != nil {
+		log.Printf("Can not clone original repo: %e", err)
+		return err
+	}
+
+	log.Printf("Moving tests folder to student code")
+	_, err = runCommand("mv", "original_repo/tests", "tests/")
+	if err != nil {
+		log.Printf("Can not move original tests/ folder to student code")
+		return err
+	}
+	return nil
+}
+
+func validatePytestOutput(output string) error {
+	match := PYTEST_RESULT_PATTERN.FindStringSubmatch(output)
+	fmt.Printf("%v", match)
+	result := make(map[string]string)
+	for i, name := range PYTEST_RESULT_PATTERN.SubexpNames() {
+		if i != 0 && name != "" {
+			result[name] = match[i]
+		}
+	}
+	if result["failed"] != "" || result["skipped"] != "" {
+		fmt.Printf("Not all tests are passed")
+		return errors.New("some tests are failed or skipped")
+	}
+	return nil
+}
+
+func runPytest() error {
+	buffer, err := runCommand("pytest", "tests/")
+	if err != nil {
+		log.Printf("Can not run pytest: %e", err)
+		return err
+	}
+	err = validatePytestOutput(buffer.String())
+	if err != nil {
+		log.Printf("Can not validate tests result: %e", err)
+		return err
+	}
+	return nil
+}
+
+func main() {
+	log.Printf("Searching for %s", config.StudentConfigFilename)
+	skillsConfig, err := getStudentConfig()
+	if err != nil {
+		log.Fatalf("Can not read %s: %v", config.StudentConfigFilename, err)
 	}
 	if skillsConfig.UserToken == "" {
-		log.Fatalf(fmt.Sprintf("Can not find user_token in %s", config.SkillsConfigFilename))
+		log.Fatalf(fmt.Sprintf("Can not find user_token in %s", config.StudentConfigFilename))
 	}
 
-	if _, err = os.Stat(config.TestsDirectoryName); os.IsNotExist(err) {
-		log.Fatalf(fmt.Sprintf("Directory '%s' does not exist", config.TestsDirectoryName))
-	}
-
-	err = zipDirectory(config.TestsDirectoryName, ZipFilename)
+	err = setupEnvironment()
 	if err != nil {
-		log.Fatalf("Can not zip the '%s' directory: %v", config.TestsDirectoryName, err)
+		log.Fatal("Can not setup environment")
 	}
 
-	zipHash, err := dirhash.HashZip(ZipFilename, dirhash.Hash1)
+	err = runPytest()
 	if err != nil {
-		log.Fatalf("Can not get hash of the '%s': %v", config.TestsDirectoryName, err)
+		log.Fatal("Can not run pytest")
 	}
 
-	if zipHash != config.ZipHash {
-		log.Fatalf("Directory %s has been modified. Please restore it to original state.", config.TestsDirectoryName)
-	}
-
-	pipelineHash, err := hashFile(config.PipelineFilename)
-	if err != nil {
-		log.Fatalf("Can not get hash of the 'pipeline.yml': %v", err)
-	}
-
-	if pipelineHash != config.PipelineHash {
-		log.Fatalf("File %s has been modified. Please restore it to original state.", config.PipelineFilename)
-	}
-
+	log.Printf("Submiting success result")
 	err = submitResult(skillsConfig)
 	if err != nil {
-		log.Fatalf("Can not submit results to Skills. Please try again later.")
+		log.Fatalf("Can not submit result: %e. Please try again later.", err)
 	}
 }
