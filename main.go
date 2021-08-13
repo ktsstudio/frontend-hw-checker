@@ -124,7 +124,7 @@ func setupEnvironment() error {
 		log.Printf("Run pip3 install -r requirements.txt")
 		_, err = runCommand("pip3", "install", "-r", "requirements.txt")
 		if err != nil {
-			log.Printf("Can not install requirements: %e", err)
+			log.Printf("Can not install requirements: %v", err)
 			return err
 		}
 	}
@@ -132,20 +132,20 @@ func setupEnvironment() error {
 	log.Printf("Installing pytest")
 	_, err = runCommand("pip3", "install", "pytest")
 	if err != nil {
-		log.Printf("Can not install pytest: %e", err)
+		log.Printf("Can not install pytest: %v", err)
 		return err
 	}
 	log.Printf("Removing student tests/ dir")
 	_, err = runCommand("rm", "-rf", "tests")
 	if err != nil {
-		log.Printf("Can not remove tests/ folder: %e", err)
+		log.Printf("Can not remove tests/ folder: %v", err)
 		return err
 	}
 
 	log.Printf("Cloning original repo")
 	_, err = runCommand("git", "clone", config.GithubRepo, "original_repo")
 	if err != nil {
-		log.Printf("Can not clone original repo: %e", err)
+		log.Printf("Can not clone original repo: %v", err)
 		return err
 	}
 
@@ -167,8 +167,8 @@ func validatePytestOutput(output string) error {
 		}
 	}
 	if result["failed"] != "" || result["skipped"] != "" {
-		fmt.Printf("Not all tests are passed")
-		return errors.New("some tests are failed or skipped")
+		fmt.Printf("Some tests are failed or skipped")
+		return errors.New("")
 	}
 	return nil
 }
@@ -176,12 +176,11 @@ func validatePytestOutput(output string) error {
 func runPytest() error {
 	buffer, err := runCommand("pytest", "tests/")
 	if err != nil {
-		log.Printf("Can not run pytest: %e", err)
+		log.Printf("Can not run pytest: %v", err)
 		return err
 	}
 	err = validatePytestOutput(buffer.String())
 	if err != nil {
-		log.Printf("Can not validate tests result: %e", err)
 		return err
 	}
 	return nil
@@ -204,12 +203,12 @@ func main() {
 
 	err = runPytest()
 	if err != nil {
-		log.Fatal("Can not run pytest")
+		log.Fatal("Can not run tests")
 	}
 
 	log.Printf("Submiting success result")
 	err = submitResult(skillsConfig)
 	if err != nil {
-		log.Fatalf("Can not submit result: %e. Please try again later.", err)
+		log.Fatalf("Can not submit result: %v. Please try again later.", err)
 	}
 }
