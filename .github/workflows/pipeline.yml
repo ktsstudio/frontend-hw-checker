@@ -39,5 +39,5 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ github.event.inputs.CALLBACK_TASK_ID }}
+          tags: ktshub/backend-summer-2021:task-${{ github.event.inputs.CALLBACK_TASK_ID }}
           labels: ${{ steps.meta.outputs.labels }}
