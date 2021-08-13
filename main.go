@@ -27,7 +27,7 @@ type Config struct {
 	GithubStudentRef  string
 }
 
-var PYTEST_RESULT_PATTERN = regexp.MustCompile("={25}\\s*(?P<failed>\\d+ failed,?)?\\s*(?P<passed>\\d+ passed,?)?\\s*(?P<skipped>\\d+ skipped,?)? in .*={25}")
+var PytestResultPattern = regexp.MustCompile("={25}\\s*(?P<failed>\\d+ failed,?)?\\s*(?P<passed>\\d+ passed,?)?\\s*(?P<skipped>\\d+ skipped,?)? in .*={25}")
 
 type StudentConfig struct {
 	UserToken string `yaml:"user_token"`
@@ -159,9 +159,9 @@ func setupEnvironment() error {
 }
 
 func validatePytestOutput(output string) error {
-	match := PYTEST_RESULT_PATTERN.FindStringSubmatch(output)
+	match := PytestResultPattern.FindStringSubmatch(output)
 	result := make(map[string]string)
-	for i, name := range PYTEST_RESULT_PATTERN.SubexpNames() {
+	for i, name := range PytestResultPattern.SubexpNames() {
 		if i != 0 && name != "" {
 			result[name] = match[i]
 		}
