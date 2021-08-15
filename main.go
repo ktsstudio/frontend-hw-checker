@@ -22,9 +22,6 @@ type Config struct {
 	LmsCompanyToken string
 	LmsBaseUrl      string
 	CallbackTaskId  string
-
-	GithubStudentRepo string
-	GithubStudentRef  string
 }
 
 var PytestResultPattern = regexp.MustCompile("={25}\\s*(?P<failed>\\d+ failed,?)?\\s*(?P<passed>\\d+ passed,?)?\\s*(?P<skipped>\\d+ skipped,?)? in .*={25}")
@@ -79,8 +76,8 @@ func submitResult(skillsConfig StudentConfig) error {
 		TaskID:    config.CallbackTaskId,
 		UserToken: skillsConfig.UserToken,
 		Extra: RequestExtra{
-			StudentRepo: config.GithubStudentRepo,
-			StudentRef:  config.GithubStudentRef,
+			StudentRepo: os.Getenv("GITHUB_REPOSITORY"),
+			StudentRef:  os.Getenv("GITHUB_REF"),
 		},
 	})
 	req, err := http.NewRequest("POST", config.LmsBaseUrl, bytes.NewReader(data))
