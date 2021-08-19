@@ -4,5 +4,5 @@ RUN echo "deb http://http.us.debian.org/debian/ testing non-free contrib main" >
 RUN apt update -y && apt install -y python3 python3-pip
 WORKDIR code
 COPY . .
-RUN unset GOPATH && go build -o build/main *.go
+RUN unset GOPATH && go build -o build/main .
 RUN rm * || true

@@ -13,51 +13,46 @@ import (
 	"os/exec"
 	"regexp"
 	"time"
+	"validator/v1/pkg/app_config"
+	"validator/v1/pkg/s3_uploader"
 )
-
-type Config struct {
-	StudentConfigFilename string
-
-	GithubRepo      string
-	LmsCompanyToken string
-	LmsBaseUrl      string
-	CallbackTaskId  string
-}
 
 var PytestResultPattern = regexp.MustCompile("={25}\\s*(?P<failed>\\d+ failed,?)?\\s*(?P<passed>\\d+ passed,?)?\\s*(?P<skipped>\\d+ skipped,?)? in .*={25}")
 
-type StudentConfig struct {
-	UserToken string `yaml:"user_token"`
-}
-
-func getStudentConfig() (StudentConfig, error) {
-	studentConfig := StudentConfig{}
-	f, err := os.Open(config.StudentConfigFilename)
+func getStudentConfig() error {
+	f, err := os.Open(config.StudentConfig.ConfigFilename)
 	defer func() {
 		_ = f.Close()
 	}()
 	if err != nil {
-		log.Printf("Can not open %s", config.StudentConfigFilename)
-		return StudentConfig{}, err
+		log.Printf("Can not open %s", config.StudentConfig.ConfigFilename)
+		return err
 	}
 
-	log.Printf("Reading %s", config.StudentConfigFilename)
+	log.Printf("Reading %s", config.StudentConfig.ConfigFilename)
 	buffer, err := ioutil.ReadAll(f)
 	if err != nil {
-		log.Printf("Can not read %s", config.StudentConfigFilename)
-		return StudentConfig{}, err
+		log.Printf("Can not read %s", config.StudentConfig.ConfigFilename)
+		return err
 	}
+
+	studentConfig := app_config.StudentConfig{}
 
 	err = yaml.Unmarshal(buffer, &studentConfig)
-	log.Printf("Parse %s", config.StudentConfigFilename)
+	log.Printf("Parse %s", config.StudentConfig.ConfigFilename)
 	if err != nil {
-		log.Printf("Can not parse %s", config.StudentConfigFilename)
-		return StudentConfig{}, err
+		log.Printf("Can not parse %s", config.StudentConfig.ConfigFilename)
+		return err
 	}
-	return studentConfig, nil
+	if studentConfig.UserToken == "" {
+		log.Printf("Empty user token")
+		return errors.New(fmt.Sprintf("can not find user_token in %s", config.StudentConfig.ConfigFilename))
+	}
+	config.StudentConfig.UserToken = studentConfig.UserToken
+	return nil
 }
 
-func submitResult(skillsConfig StudentConfig) error {
+func submitResult() error {
 	client := http.Client{}
 
 	type RequestExtra struct {
@@ -74,10 +69,10 @@ func submitResult(skillsConfig StudentConfig) error {
 	data, err := json.Marshal(Request{
 		Created:   time.Now(),
 		TaskID:    config.CallbackTaskId,
-		UserToken: skillsConfig.UserToken,
+		UserToken: config.StudentConfig.UserToken,
 		Extra: RequestExtra{
-			StudentRepo: os.Getenv("GITHUB_REPOSITORY"),
-			StudentRef:  os.Getenv("GITHUB_REF"),
+			StudentRepo: config.StudentConfig.StudentRepo,
+			StudentRef:  config.StudentConfig.StudentRef,
 		},
 	})
 	req, err := http.NewRequest("POST", config.LmsBaseUrl, bytes.NewReader(data))
@@ -184,28 +179,48 @@ func runPytest() error {
 }
 
 func main() {
-	log.Printf("Searching for %s", config.StudentConfigFilename)
-	skillsConfig, err := getStudentConfig()
-	if err != nil {
-		log.Fatalf("Can not read %s: %v", config.StudentConfigFilename, err)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Fatal("Failed to run")
+		}
+	}()
+
+	config.StudentConfig.StudentRepo = os.Getenv("GITHUB_REPOSITORY")
+	config.StudentConfig.StudentRef = os.Getenv("GITHUB_REF")
+	if config.StudentConfig.StudentRepo == "" || config.StudentConfig.StudentRef == "" {
+		log.Fatal("No info about GitHub Repo is supplied")
 	}
-	if skillsConfig.UserToken == "" {
-		log.Fatalf(fmt.Sprintf("Can not find user_token in %s", config.StudentConfigFilename))
+
+	uploader := s3_uploader.NewS3Uploader(config)
+	isCorrect := false
+	defer func() {
+		log.Print("Uploading source code")
+		err := uploader.UploadRepo(isCorrect)
+		if err != nil {
+			log.Fatalf("Can not upload repo to s3: %v", err)
+		}
+	}()
+
+	log.Printf("Searching for %s", config.StudentConfig.ConfigFilename)
+	err := getStudentConfig()
+	if err != nil {
+		log.Panicf("Can not read %s: %v", config.StudentConfig.ConfigFilename, err)
 	}
 
 	err = setupEnvironment()
 	if err != nil {
-		log.Fatal("Can not setup environment")
+		log.Panic("Can not setup environment")
 	}
 
 	err = runPytest()
 	if err != nil {
-		log.Fatal("Can not run tests")
+		log.Panic("Can not run tests")
 	}
 
 	log.Printf("Submiting success result")
-	err = submitResult(skillsConfig)
+	err = submitResult()
 	if err != nil {
-		log.Fatalf("Can not submit result: %v. Please try again later.", err)
+		log.Panicf("Can not submit result: %v. Please try again later.", err)
 	}
+	isCorrect = true
 }
