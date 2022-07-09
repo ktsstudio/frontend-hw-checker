@@ -13,8 +13,7 @@ import (
 	"regexp"
 	"time"
 	"validator/v1/pkg/app_config"
-	"validator/v1/pkg/s3_uploader"
-
+	// "validator/v1/pkg/s3_uploader"
 	"gopkg.in/yaml.v2"
 )
 
@@ -167,15 +166,15 @@ func main() {
 		log.Fatal("No info about GitHub Repo is supplied")
 	}
 
-	uploader := s3_uploader.NewS3Uploader(config)
-	isCorrect := false
-	defer func() {
-		log.Print("Uploading source code")
-		err := uploader.UploadRepo(isCorrect)
-		if err != nil {
-			log.Fatalf("Can not upload repo to s3: %v", err)
-		}
-	}()
+	// uploader := s3_uploader.NewS3Uploader(config)
+	// isCorrect := false
+	// defer func() {
+	// 	log.Print("Uploading source code")
+	// 	err := uploader.UploadRepo(isCorrect)
+	// 	if err != nil {
+	// 		log.Fatalf("Can not upload repo to s3: %v", err)
+	// 	}
+	// }()
 
 	log.Printf("Searching for %s", config.StudentConfig.ConfigFilename)
 	err := getStudentConfig()
@@ -198,5 +197,5 @@ func main() {
 	if err != nil {
 		log.Panicf("Can not submit result: %v. Please try again later.", err)
 	}
-	isCorrect = true
+	// isCorrect = true
 }
