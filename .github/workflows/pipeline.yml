@@ -10,7 +10,7 @@ on:
         required: true
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: frontend_hw_checker
+  IMAGE_NAME: frontend-hw-checker
 jobs:
   build_image:
     runs-on: ubuntu-latest
@@ -32,12 +32,12 @@ jobs:
         id: meta
         uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
         with:
-          images: ktshub/backend-summer-2021
+          images: ktshub/frontend-hw-checker
 
       - name: Build and push Docker image
         uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
         with:
           context: .
           push: true
-          tags: ktshub/frontend-hw:task-${{ github.event.inputs.CALLBACK_TASK_ID }}
+          tags: ktshub/frontend-hw-checker:task-${{ github.event.inputs.CALLBACK_TASK_ID }}
           labels: ${{ steps.meta.outputs.labels }}
