@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -14,7 +13,9 @@ import (
 	"regexp"
 	"time"
 	"validator/v1/pkg/app_config"
-	// "validator/v1/pkg/s3_uploader"
+	"validator/v1/pkg/s3_uploader"
+
+	"gopkg.in/yaml.v2"
 )
 
 var PytestResultPattern = regexp.MustCompile("={25}\\s*(?P<failed>\\d+ failed,?)?\\s*(?P<passed>\\d+ passed,?)?\\s*(?P<skipped>\\d+ skipped,?)? in .*={25}")
@@ -121,40 +122,25 @@ func setupEnvironment() error {
 		}
 	}
 
-	// log.Printf("Removing student tests/ dir")
-	// _, err = runCommand("rm", "-rf", "tests")
-	// if err != nil {
-	// 	log.Printf("Can not remove tests/ folder: %v", err)
-	// 	return err
-	// }
-
-	// log.Printf("Cloning original repo")
-	// _, err = runCommand("git", "clone", config.GithubRepo, "original_repo")
-	// if err != nil {
-	// 	log.Printf("Can not clone original repo: %v", err)
-	// 	return err
-	// }
-
-	// log.Printf("Moving tests folder to student code")
-	// _, err = runCommand("mv", "original_repo/tests", "tests/")
-	// if err != nil {
-	// 	log.Printf("Can not move original tests/ folder to student code")
-	// 	return err
-	// }
-	return nil
-}
-
-func validatePytestOutput(output string) error {
-	match := PytestResultPattern.FindStringSubmatch(output)
-	result := make(map[string]string)
-	for i, name := range PytestResultPattern.SubexpNames() {
-		if i != 0 && name != "" {
-			result[name] = match[i]
-		}
+	log.Printf("Removing student tests/ dir")
+	_, err = runCommand("rm", "-rf", "src/__test__")
+	if err != nil {
+		log.Printf("Can not remove src/__test__/ folder: %v", err)
+		return err
 	}
-	if result["failed"] != "" || result["skipped"] != "" {
-		fmt.Printf("Some tests are failed or skipped")
-		return errors.New("")
+
+	log.Printf("Cloning original repo")
+	_, err = runCommand("git", "clone", config.GithubRepo, "original_repo")
+	if err != nil {
+		log.Printf("Can not clone original repo: %v", err)
+		return err
+	}
+
+	log.Printf("Moving tests folder to student code")
+	_, err = runCommand("mv", "original_repo/src/__test__", "src/__test__/")
+	if err != nil {
+		log.Printf("Can not move original src/__test__/ folder to student code")
+		return err
 	}
 	return nil
 }
@@ -162,46 +148,42 @@ func validatePytestOutput(output string) error {
 func runTests() error {
 	_, err := runCommand("yarn", "test")
 	if err != nil {
-		log.Printf("Can not run test: %v", err)
+		log.Printf("Tests failed: %v", err)
 		return err
 	}
-	// err = validatePytestOutput(buffer.String())
-	// if err != nil {
-	// 	return err
-	// }
 	return nil
 }
 
 func main() {
-	// defer func() {
-	// 	if r := recover(); r != nil {
-	// 		log.Fatal("Failed to run")
-	// 	}
-	// }()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Fatal("Failed to run")
+		}
+	}()
 
-	// config.StudentConfig.StudentRepo = os.Getenv("GITHUB_REPOSITORY")
-	// config.StudentConfig.StudentRef = os.Getenv("GITHUB_REF")
-	// if config.StudentConfig.StudentRepo == "" || config.StudentConfig.StudentRef == "" {
-	// 	log.Fatal("No info about GitHub Repo is supplied")
-	// }
+	config.StudentConfig.StudentRepo = os.Getenv("GITHUB_REPOSITORY")
+	config.StudentConfig.StudentRef = os.Getenv("GITHUB_REF")
+	if config.StudentConfig.StudentRepo == "" || config.StudentConfig.StudentRef == "" {
+		log.Fatal("No info about GitHub Repo is supplied")
+	}
 
-	// uploader := s3_uploader.NewS3Uploader(config)
-	// isCorrect := false
-	// defer func() {
-	// 	log.Print("Uploading source code")
-	// 	err := uploader.UploadRepo(isCorrect)
-	// 	if err != nil {
-	// 		log.Fatalf("Can not upload repo to s3: %v", err)
-	// 	}
-	// }()
+	uploader := s3_uploader.NewS3Uploader(config)
+	isCorrect := false
+	defer func() {
+		log.Print("Uploading source code")
+		err := uploader.UploadRepo(isCorrect)
+		if err != nil {
+			log.Fatalf("Can not upload repo to s3: %v", err)
+		}
+	}()
 
-	// log.Printf("Searching for %s", config.StudentConfig.ConfigFilename)
-	// err := getStudentConfig()
-	// if err != nil {
-	// 	log.Panicf("Can not read %s: %v", config.StudentConfig.ConfigFilename, err)
-	// }
+	log.Printf("Searching for %s", config.StudentConfig.ConfigFilename)
+	err := getStudentConfig()
+	if err != nil {
+		log.Panicf("Can not read %s: %v", config.StudentConfig.ConfigFilename, err)
+	}
 
-	err := setupEnvironment()
+	err = setupEnvironment()
 	if err != nil {
 		log.Panic("Can not setup environment")
 	}
@@ -211,10 +193,10 @@ func main() {
 		log.Panic("Can not run tests")
 	}
 
-	// log.Printf("Submiting success result")
-	// err = submitResult()
-	// if err != nil {
-	// 	log.Panicf("Can not submit result: %v. Please try again later.", err)
-	// }
-	// isCorrect = true
+	log.Printf("Submiting success result")
+	err = submitResult()
+	if err != nil {
+		log.Panicf("Can not submit result: %v. Please try again later.", err)
+	}
+	isCorrect = true
 }
