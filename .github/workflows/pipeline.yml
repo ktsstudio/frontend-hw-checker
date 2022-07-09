@@ -1,4 +1,4 @@
-name: Build checker for lms.metaclass task
+name: Build checker for frontend metaclass
 on:
   workflow_dispatch:
     inputs:
@@ -10,7 +10,7 @@ on:
         required: true
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: skills-backend-checker
+  IMAGE_NAME: frontend_hw_checker
 jobs:
   build_image:
     runs-on: ubuntu-latest
@@ -39,5 +39,5 @@ jobs:
         with:
           context: .
           push: true
-          tags: ktshub/backend-summer-2021:task-${{ github.event.inputs.CALLBACK_TASK_ID }}
+          tags: ktshub/frontend-hw:task-${{ github.event.inputs.CALLBACK_TASK_ID }}
           labels: ${{ steps.meta.outputs.labels }}
