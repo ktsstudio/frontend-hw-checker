@@ -141,15 +141,23 @@ func setupEnvironment() error {
 		log.Printf("Can not move original src/__test__/ folder to student code")
 		return err
 	}
+
+	log.Printf("Original tests moved to students code")
+
 	return nil
 }
 
 func runTests() error {
+	log.Printf("Start testing")
+
 	_, err := runCommand("yarn", "test")
 	if err != nil {
 		log.Printf("Tests failed: %v", err)
 		return err
 	}
+
+	log.Printf("Testing has been completed successfully")
+
 	return nil
 }
 
