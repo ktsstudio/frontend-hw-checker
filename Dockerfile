@@ -8,7 +8,7 @@ WORKDIR /code
 COPY . .
 RUN unset GOPATH && go build -o build/main .
 
-FROM node:18-alpine
+FROM node:18-slim
 # We don't need the standalone Chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
 
