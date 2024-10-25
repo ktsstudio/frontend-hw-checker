@@ -95,8 +95,8 @@ func submitResult() error {
 func runCommand(cmd string, args ...string) (bytes.Buffer, error) {
 	var outBuffer bytes.Buffer
 	execCmd := exec.Command(cmd, args...)
-	execCmd.Stdout = &outBuffer
-	execCmd.Stderr = &outBuffer
+	execCmd.Stdout = os.Stdout
+	execCmd.Stderr = os.Stderr
 
 	err := execCmd.Run()
 	if outBuffer.Len() > 0 {
