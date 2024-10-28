@@ -12,6 +12,7 @@ FROM node:18-slim
 # We don't need the standalone Chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
 
+RUN apt list -a google-chrome-stable
 # Устанавливаем Google Chrome версии 110.0.5481.177-1
 RUN apt-get update -y && apt upgrade -y && apt-get install gnupg wget -y && \
     wget --quiet --output-document=- https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/google-archive.gpg && \
