@@ -12,19 +12,18 @@ FROM node:18-slim
 # We don't need the standalone Chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
 
-RUN apt list -a google-chrome-stable -y
-# # Устанавливаем Google Chrome версии 110.0.5481.177-1
-# RUN apt-get update -y && apt upgrade -y && apt-get install gnupg wget -y && \
-#     wget --quiet --output-document=- https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/google-archive.gpg && \
-#     sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' && \
-#     apt-get update && \
-#     apt-get install google-chrome-stable=110.0.5481.177-1 -y --no-install-recommends && \
-#     apt install -y git && \
-#     rm -rf /var/lib/apt/lists/*
+# Устанавливаем Google Chrome версии 126.0.6478.182
+RUN apt-get update -y && apt upgrade -y && apt-get install gnupg wget -y && \
+    wget --quiet --output-document=- https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/google-archive.gpg && \
+    sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' && \
+    apt-get update && \
+    apt-get install google-chrome-stable=126.0.6478.182 -y --no-install-recommends && \
+    apt install -y git && \
+    rm -rf /var/lib/apt/lists/*
 
-# ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 
-# WORKDIR /code
-# RUN node -v
-# RUN yarn -v
-# COPY --from=builder /code/build /code/build
+WORKDIR /code
+RUN node -v
+RUN yarn -v
+COPY --from=builder /code/build /code/build
